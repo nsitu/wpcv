@@ -15,9 +15,25 @@ defaults:
 
 jobs:
   validate:
-    name: Validate and package
+    name: Validate on WordPress ${{ matrix.wordpress }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    strategy:
+      matrix:
+        wordpress: ['6.5', latest]
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: wpcv-test
+          MYSQL_DATABASE: wpcv_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
@@ -25,15 +41,33 @@ jobs:
       - uses: shivammathur/setup-php@bf6b4fbd49ca58e4608c9c89fba0b8d90bd2a39f # 2.35.5
         with:
           php-version: '8.2'
+          extensions: mysqli, dom
           coverage: none
       - name: Lint PHP
-        run: find plugin/wpcv -type f -name '*.php' -print0 | xargs -0 -n1 php -l
+        run: find plugin/wpcv tests -type f -name '*.php' -print0 | xargs -0 -n1 php -l
+      - name: Check JavaScript
+        run: node --check plugin/wpcv/assets/cv.js
       - name: Check deployment scripts
         run: |
-          bash -n scripts/deploy.sh scripts/remote-install.sh
-          shellcheck scripts/deploy.sh scripts/remote-install.sh
+          bash -n scripts/deploy.sh scripts/remote-install.sh scripts/fetch-wp-cli.sh tests/deployment-preflight.sh
+          shellcheck scripts/deploy.sh scripts/remote-install.sh scripts/fetch-wp-cli.sh tests/deployment-preflight.sh
+      - name: Test container discovery failures
+        run: bash tests/deployment-preflight.sh
       - name: Build plugin ZIP
         run: python3 scripts/build.py
+      - name: Fetch verified WP-CLI
+        run: bash scripts/fetch-wp-cli.sh
+      - name: Test CV in a disposable WordPress installation
+        env:
+          WORDPRESS_VERSION: ${{ matrix.wordpress }}
+          WPCV_TEST_SITE: '1'
+        run: |
+          WP_TEST_PATH="$RUNNER_TEMP/wpcv-wordpress"
+          php dist/wp-cli.phar core download --path="$WP_TEST_PATH" --version="$WORDPRESS_VERSION"
+          php dist/wp-cli.phar config create --path="$WP_TEST_PATH" --dbname=wpcv_test --dbuser=root --dbpass=wpcv-test --dbhost=127.0.0.1:3306
+          php dist/wp-cli.phar core install --path="$WP_TEST_PATH" --url=http://localhost --title='CV test' --admin_user=cv-admin --admin_password=local-test-only --admin_email=test@example.org --skip-email
+          php dist/wp-cli.phar plugin install "$GITHUB_WORKSPACE/dist/wpcv.zip" --activate --path="$WP_TEST_PATH"
+          php dist/wp-cli.phar eval-file "$GITHUB_WORKSPACE/tests/wordpress-integration.php" --path="$WP_TEST_PATH"
 
   deploy:
     name: Deploy to WordPress
@@ -52,11 +86,7 @@ jobs:
       - name: Build plugin ZIP
         run: python3 scripts/build.py
       - name: Fetch verified WP-CLI
-        run: |
-          curl --fail --location --silent --show-error --retry 3 \
-            https://github.com/wp-cli/wp-cli/releases/download/v2.12.0/wp-cli-2.12.0.phar \
-            --output dist/wp-cli.phar
-          echo 'ce34ddd838f7351d6759068d09793f26755463b4a4610a5a5c0a97b68220d85c  dist/wp-cli.phar' | sha256sum --check
+        run: bash scripts/fetch-wp-cli.sh
       - name: Upload, install, and activate
         env:
           VM_HOST: ${{ secrets.VM_HOST }}

@@ -7,6 +7,11 @@ service=${2:?CapRover Docker service name is required}
 wp_path=${3:?WordPress container path is required}
 wp_run_user=${4:?WordPress container user is required}
 
+# GitHub variables can accidentally contain whitespace from copy/paste.
+service=${service#"${service%%[![:space:]]*}"}
+service=${service%"${service##*[![:space:]]}"}
+[[ -n "$service" ]] || { echo 'CAPROVER_SERVICE must contain a Docker service name.' >&2; exit 1; }
+
 [[ "$wp_path" == /* && "$wp_path" != / ]] || { echo 'WP_PATH must be an absolute container directory.' >&2; exit 1; }
 [[ -f "$staging_dir/wpcv.zip" && -f "$staging_dir/wp-cli.phar" ]] || { echo 'Deployment files are missing.' >&2; exit 1; }
 command -v docker >/dev/null
@@ -17,10 +22,41 @@ else
 fi
 
 # Use the actual service name: upgraded CapRover installations may retain prefixes.
+if ! service=$("${docker_cmd[@]}" service inspect "$service" --format '{{.Spec.Name}}'); then
+  echo 'Cannot resolve CAPROVER_SERVICE on this Docker host. Available services:' >&2
+  "${docker_cmd[@]}" service ls --format 'table {{.Name}}\t{{.Replicas}}' >&2 || true
+  exit 1
+fi
+printf 'Target Docker service: %s\n' "$service"
+
+show_service_diagnostics() {
+  echo 'Swarm tasks (check the NODE and CURRENT STATE columns):' >&2
+  "${docker_cmd[@]}" service ps "$service" --no-trunc >&2 || true
+  echo 'Matching containers on this SSH host:' >&2
+  "${docker_cmd[@]}" ps -a --filter "label=com.docker.swarm.service.name=$service" \
+    --format 'table {{.ID}}\t{{.Names}}\t{{.Status}}' >&2 || true
+}
+
 replicas=$("${docker_cmd[@]}" service inspect "$service" --format '{{if .Spec.Mode.Replicated}}{{.Spec.Mode.Replicated.Replicas}}{{else}}0{{end}}')
-[[ "$replicas" == 1 ]] || { echo 'Deployment requires a single-replica WordPress service.' >&2; exit 1; }
+if [[ "$replicas" != 1 ]]; then
+  echo "Deployment requires a single-replica WordPress service; configured replicas: $replicas" >&2
+  show_service_diagnostics
+  exit 1
+fi
 containers=$("${docker_cmd[@]}" ps --filter "label=com.docker.swarm.service.name=$service" --filter status=running --format '{{.ID}}')
-[[ "$containers" =~ ^[a-f0-9]+$ ]] || { echo 'Expected exactly one running WordPress container on this host. Check CAPROVER_SERVICE and VM_HOST.' >&2; exit 1; }
+if [[ -z "$containers" ]]; then
+  echo 'No running WordPress container was found on this SSH host. VM_HOST must be the Swarm manager running the WordPress task.' >&2
+  show_service_diagnostics
+  exit 1
+elif [[ "$containers" == *$'\n'* ]]; then
+  echo 'Multiple running WordPress containers match this service. Wait for any rolling update or restart to finish, then retry.' >&2
+  show_service_diagnostics
+  exit 1
+elif [[ ! "$containers" =~ ^[a-f0-9]+$ ]]; then
+  printf 'Unexpected Docker container ID output: %q\n' "$containers" >&2
+  show_service_diagnostics
+  exit 1
+fi
 container=$containers
 
 # Use a temporary WP-CLI PHAR inside the existing container, with its PHP,

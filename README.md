@@ -1,11 +1,42 @@
 # WPCV
 
-A WordPress plugin scaffold with ZIP packaging and GitHub Actions deployment to an existing **CapRover WordPress app**, over SSH and Docker. Requires WordPress 6.5+ and PHP 8.2+.
+A WordPress CV plugin with ZIP packaging and GitHub Actions deployment to an existing **CapRover WordPress app**, over SSH and Docker. Requires WordPress 6.5+ and PHP 8.2+.
+
+## Creating and displaying your CV
+
+After deployment, open **CV Entries > Add CV Entry**. The content model uses one `wpcv_entry` post type and a separate `wpcv_category` taxonomy.
+
+| Entry field | Where to edit it |
+| --- | --- |
+| Title | Entry title |
+| Thumbnail image | Entry thumbnail / Featured image panel |
+| Short description | Excerpt panel |
+| Long description | Main content editor |
+| Entry context | CV entry details: venue, organization, role, or publication |
+| Month and year | CV entry details; these determine CV order independently of the publish date |
+| URL link and location | CV entry details |
+| Categories | CV Categories panel; an entry may have multiple categories |
+
+Manage categories under **CV Entries > CV Categories**. Exhibition, Performance, Publication, Degree, Teaching, and Professional are added once during activation or upgrade. You can rename or delete them and add your own; deleted categories are not recreated on later requests.
+
+Add a **Shortcode block** to the page where the CV belongs:
+
+```text
+[wpcv]
+```
+
+The shortcode displays every published, non-password-protected CV entry, newest first by its CV year and month. Use `[wpcv order="ASC"]` for oldest first. Entries without a year appear last in either order. A year without a month is supported: it sorts before January in ascending order and after January in descending order. Equal dates retain a stable creation-ID order.
+
+Category buttons filter entries instantly, with an **All** button to reset the list. Only categories used by displayed entries become filters. Uncategorized entries appear under All. Long descriptions expand through **Read more**; URL links open in the current tab. The complete list and expandable descriptions work without JavaScript. Multiple shortcodes on one page have independent filters. Entries are displayed through the shortcode; they do not create standalone public entry pages or archives.
+
+Styles inherit the site's font. Override the scoped `--wpcv-accent`, `--wpcv-border`, and `--wpcv-muted` CSS variables on `.wpcv` to customize colors. Thumbnails use WordPress's thumbnail size and crop to fit their reserved space. Plugin updates and deactivation preserve entries, metadata, and taxonomy terms.
 
 ## Plugin development
 
 - `plugin/wpcv/wpcv.php`: plugin metadata, constants, and lifecycle registration.
-- `plugin/wpcv/includes/class-plugin.php`: application hooks and an administrator-only **Tools > WPCV** status page.
+- `plugin/wpcv/includes/class-plugin.php`: lifecycle, one-time category seeding, and **Tools > WPCV** help.
+- `plugin/wpcv/includes/class-entries.php`: entry registration, metadata, and editor fields.
+- `plugin/wpcv/includes/class-shortcode.php` and `assets/`: public CV rendering and category filtering.
 - `scripts/build.py`: packages `plugin/wpcv/` into `dist/wpcv.zip`; repository files and deployment credentials stay outside the package.
 - `.github/workflows/deploy.yml`: validates pull requests; validates and deploys pushes to `main` and manual runs on `main`.
 
@@ -17,7 +48,9 @@ Build locally with Python 3 (no dependencies):
 python scripts/build.py
 ```
 
-Upload `dist/wpcv.zip` in **Plugins > Add New Plugin > Upload Plugin**, or copy `plugin/wpcv/` into your local WordPress `wp-content/plugins/` directory and activate it. The plugin currently stores no data and needs no uninstall cleanup.
+Upload `dist/wpcv.zip` in **Plugins > Add New Plugin > Upload Plugin**, or copy `plugin/wpcv/` into your local WordPress `wp-content/plugins/` directory and activate it. The plugin preserves its content when deactivated or deleted; there is no destructive uninstall hook.
+
+CI runs PHP and shell validation plus WordPress integration tests against WordPress 6.5 and the latest release, using a disposable MySQL database. The integration script tests category seeding, permission and nonce checks, date ordering, published visibility, rendering, and empty states. To run it yourself, activate the plugin on a **disposable test site** and run `WPCV_TEST_SITE=1 wp eval-file /path/to/tests/wordpress-integration.php`. The test requires a fresh CV dataset with the six initial categories.
 
 ## CapRover setup
 
@@ -80,9 +113,11 @@ The workflow checks PHP syntax on PHP 8.2, checks shell scripts, builds a ZIP, a
 
 Confirm **Tools > WPCV** in WordPress after the first deployment. This scaffold targets a single-site WordPress installation; multisite deployment needs explicit site/network activation settings.
 
+If container discovery fails, the deployment log shows the canonical service name, Swarm tasks, and matching local containers. Zero matches means the service has no running task on the SSH host; check the task's node and state. Multiple matches can occur during a rolling update; wait for it to finish and retry. The script trims accidental surrounding whitespace in `CAPROVER_SERVICE` before resolving its canonical Docker service name. Blank `VM_PORT`, `WP_PATH`, and `WP_RUN_USER` use their documented defaults.
+
 Deployment replaces plugin code in place. It does not provide atomic swaps, automatic rollback, database backups, or an HTTP health check. To restore an earlier version, revert the relevant commit on `main` and push it; the workflow reinstalls that code. Database changes introduced by future plugin features need their own recovery plan. Keep persistent data in the WordPress database or uploads directory because plugin files are replaced during updates.
 
-The repository is initialized locally without a remote or an initial commit. After configuring GitHub and the server:
+For first-time setup in a new repository, configure GitHub and the server, then commit and push:
 
 ```sh
 git add .

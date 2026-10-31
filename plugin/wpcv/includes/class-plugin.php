@@ -12,12 +12,33 @@ defined( 'ABSPATH' ) || exit;
 final class Plugin {
 
 	public static function boot(): void {
+		Entries::boot();
+		Shortcode::boot();
+		add_action( 'init', array( self::class, 'upgrade' ), 20 );
 		add_action( 'admin_menu', array( self::class, 'register_admin_page' ) );
-		// Register additional hooks and services here.
 	}
 
 	public static function activate(): void {
-		// Add one-time setup here. Keep activation safe to run repeatedly.
+		Entries::register();
+		self::upgrade();
+	}
+
+	public static function upgrade(): void {
+		// Run on active-plugin upgrades as well as first activation. Seed once so
+		// categories that administrators later delete or rename stay that way.
+		if ( '1' === get_option( 'wpcv_schema_version' ) ) {
+			return;
+		}
+		$categories = array( 'Exhibition', 'Performance', 'Publication', 'Degree', 'Teaching', 'Professional' );
+		foreach ( $categories as $name ) {
+			if ( ! term_exists( $name, Entries::TAXONOMY ) ) {
+				$result = wp_insert_term( $name, Entries::TAXONOMY );
+				if ( is_wp_error( $result ) ) {
+					return;
+				}
+			}
+		}
+		update_option( 'wpcv_schema_version', '1', false );
 	}
 
 	public static function deactivate(): void {
@@ -42,7 +63,9 @@ final class Plugin {
 		?>
 		<div class="wrap">
 			<h1><?php esc_html_e( 'WPCV', 'wpcv' ); ?></h1>
-			<p><?php esc_html_e( 'WPCV is active and ready for custom functionality.', 'wpcv' ); ?></p>
+			<p><?php esc_html_e( 'Create CV Entries, assign CV Categories, and place [wpcv] on a page to display your CV.', 'wpcv' ); ?></p>
+			<p><?php esc_html_e( 'Entries appear newest first by their CV year and month. Use [wpcv order="ASC"] for oldest first. Entries without a year appear last.', 'wpcv' ); ?></p>
+			<p><a href="<?php echo esc_url( admin_url( 'edit.php?post_type=' . Entries::POST_TYPE ) ); ?>"><?php esc_html_e( 'Manage CV entries', 'wpcv' ); ?></a></p>
 			<p>
 				<?php
 				printf(
