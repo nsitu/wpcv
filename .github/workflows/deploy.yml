@@ -1,0 +1,70 @@
+name: Validate and deploy WordPress plugin
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  validate:
+    name: Validate and package
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+      - uses: shivammathur/setup-php@bf6b4fbd49ca58e4608c9c89fba0b8d90bd2a39f # 2.35.5
+        with:
+          php-version: '8.2'
+          coverage: none
+      - name: Lint PHP
+        run: find plugin/wpcv -type f -name '*.php' -print0 | xargs -0 -n1 php -l
+      - name: Check deployment scripts
+        run: |
+          bash -n scripts/deploy.sh scripts/remote-install.sh
+          shellcheck scripts/deploy.sh scripts/remote-install.sh
+      - name: Build plugin ZIP
+        run: python3 scripts/build.py
+
+  deploy:
+    name: Deploy to WordPress
+    needs: validate
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    concurrency:
+      group: wpcv-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+      - name: Build plugin ZIP
+        run: python3 scripts/build.py
+      - name: Fetch verified WP-CLI
+        run: |
+          curl --fail --location --silent --show-error --retry 3 \
+            https://github.com/wp-cli/wp-cli/releases/download/v2.12.0/wp-cli-2.12.0.phar \
+            --output dist/wp-cli.phar
+          echo 'ce34ddd838f7351d6759068d09793f26755463b4a4610a5a5c0a97b68220d85c  dist/wp-cli.phar' | sha256sum --check
+      - name: Upload, install, and activate
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+          VM_KNOWN_HOSTS: ${{ secrets.VM_KNOWN_HOSTS }}
+          VM_PORT: ${{ vars.VM_PORT }}
+          CAPROVER_SERVICE: ${{ vars.CAPROVER_SERVICE }}
+          WP_PATH: ${{ vars.WP_PATH }}
+          WP_RUN_USER: ${{ vars.WP_RUN_USER }}
+        run: bash scripts/deploy.sh
