@@ -14,6 +14,8 @@ After deployment, open **CV Entries > Add CV Entry**. The content model uses one
 | Long description | Main content editor |
 | Entry context | CV entry details: venue, organization, role, or publication |
 | Month and year | CV entry details; these determine CV order independently of the publish date |
+| End month/year and date display override | Optional ranges or original labels for multiple occurrences |
+| Ongoing as of year | Historical source year for an open-ended role; does not imply it continues today |
 | URL link and location | CV entry details |
 | Categories | CV Categories panel; an entry may have multiple categories |
 
@@ -25,7 +27,9 @@ Add a **Shortcode block** to the page where the CV belongs:
 [wpcv]
 ```
 
-The shortcode displays every published, non-password-protected CV entry, newest first by its CV year and month. Use `[wpcv order="ASC"]` for oldest first. Entries without a year appear last in either order. A year without a month is supported: it sorts before January in ascending order and after January in descending order. Equal dates retain a stable creation-ID order.
+The shortcode displays every published, non-password-protected CV entry, newest first by its latest numeric CV endpoint (start, optional end, or historical ongoing-as-of year). Use `[wpcv order="ASC"]` for oldest first. Entries without a start year appear last in either order. A year without a month is supported: it sorts before January in ascending order and after January in descending order. Equal dates retain a stable creation-ID order.
+
+Use a date display override to preserve source wording such as `Jan 2018, Oct 2017`; for separate occurrences, enter the latest occurrence in the numeric start fields. Overrides change the display, while numeric dates determine sorting. An ongoing-as-of year always appends an explicit qualifier, for example `2003-present (as of 2022)`.
 
 Category buttons filter entries instantly, with an **All** button to reset the list. Only categories used by displayed entries become filters. Uncategorized entries appear under All. Long descriptions expand through **Read more**; URL links open in the current tab. The complete list and expandable descriptions work without JavaScript. Multiple shortcodes on one page have independent filters. Entries are displayed through the shortcode; they do not create standalone public entry pages or archives.
 
@@ -37,6 +41,7 @@ Styles inherit the site's font. Override the scoped `--wpcv-accent`, `--wpcv-bor
 - `plugin/wpcv/includes/class-plugin.php`: lifecycle, one-time category seeding, and **Tools > WPCV** help.
 - `plugin/wpcv/includes/class-entries.php`: entry registration, metadata, and editor fields.
 - `plugin/wpcv/includes/class-shortcode.php` and `assets/`: public CV rendering and category filtering.
+- `plugin/wpcv/includes/class-importer.php` and `class-cli.php`: reviewed JSON import and batch rollback, loaded only by WP-CLI.
 - `scripts/build.py`: packages `plugin/wpcv/` into `dist/wpcv.zip`; repository files and deployment credentials stay outside the package.
 - `.github/workflows/deploy.yml`: validates pull requests; validates and deploys pushes to `main` and manual runs on `main`.
 
@@ -50,7 +55,11 @@ python scripts/build.py
 
 Upload `dist/wpcv.zip` in **Plugins > Add New Plugin > Upload Plugin**, or copy `plugin/wpcv/` into your local WordPress `wp-content/plugins/` directory and activate it. The plugin preserves its content when deactivated or deleted; there is no destructive uninstall hook.
 
-CI runs PHP and shell validation plus WordPress integration tests against WordPress 6.5 and the latest release, using a disposable MySQL database. The integration script tests category seeding, permission and nonce checks, date ordering, published visibility, rendering, and empty states. To run it yourself, activate the plugin on a **disposable test site** and run `WPCV_TEST_SITE=1 wp eval-file /path/to/tests/wordpress-integration.php`. The test requires a fresh CV dataset with the six initial categories.
+CI runs PHP and shell validation plus WordPress integration tests against WordPress 6.5 and the latest release, using a disposable MySQL database. The integration scripts test CV behavior plus import validation, permissions, locks, media reuse, reruns, failed-upload recovery, and rollback. On a **disposable test site**, run `WPCV_TEST_SITE=1 wp eval-file /path/to/tests/wordpress-integration.php` and then `WPCV_TEST_SITE=1 wp eval-file /path/to/tests/import-integration.php`. The CV test requires a fresh CV dataset with the six initial categories.
+
+## Importing a reviewed CV
+
+See [the import guide](docs/importing.md) for the JSON format, review package, CapRover transfer commands, preview, draft creation, and batch rollback. `scripts/prepare-import.py` prepares source-mapped thumbnails and review files from a curated manifest; it does not automatically infer arbitrary PDF layouts. The content package stays under ignored `output/import/`, separately from the plugin ZIP and normal deployment. Committing/deploying plugin code does not import or publish CV content.
 
 ## CapRover setup
 

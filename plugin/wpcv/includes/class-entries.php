@@ -95,6 +95,10 @@ final class Entries {
 			'_wpcv_context'  => array( 'type' => 'string', 'sanitize' => 'sanitize_textarea_field' ),
 			'_wpcv_month'    => array( 'type' => 'integer', 'sanitize' => array( self::class, 'sanitize_month' ), 'max' => 12 ),
 			'_wpcv_year'     => array( 'type' => 'integer', 'sanitize' => array( self::class, 'sanitize_year' ), 'max' => 9999 ),
+			'_wpcv_end_month' => array( 'type' => 'integer', 'sanitize' => array( self::class, 'sanitize_month' ), 'max' => 12 ),
+			'_wpcv_end_year' => array( 'type' => 'integer', 'sanitize' => array( self::class, 'sanitize_year' ), 'max' => 9999 ),
+			'_wpcv_date_label' => array( 'type' => 'string', 'sanitize' => 'sanitize_text_field' ),
+			'_wpcv_ongoing_as_of' => array( 'type' => 'integer', 'sanitize' => array( self::class, 'sanitize_year' ), 'max' => 9999 ),
 			'_wpcv_url'      => array( 'type' => 'string', 'sanitize' => array( self::class, 'sanitize_url' ) ),
 			'_wpcv_location' => array( 'type' => 'string', 'sanitize' => 'sanitize_text_field' ),
 		);
@@ -151,7 +155,28 @@ final class Entries {
 			<label for="wpcv-year"><strong><?php esc_html_e( 'Year', 'wpcv' ); ?></strong></label>
 			<input id="wpcv-year" name="_wpcv_year" type="number" min="1" max="9999" step="1" value="<?php echo $year ? esc_attr( $year ) : ''; ?>" style="width:7em">
 		</p>
-		<p class="description"><?php esc_html_e( 'The CV sorts by this year and month, independently of the publish date. Entries without a year appear last; a year without a month is supported.', 'wpcv' ); ?></p>
+		<p class="description"><?php esc_html_e( 'Start date, independent of the publish date. Leave the month blank for year-only dates. Undated entries appear last.', 'wpcv' ); ?></p>
+		<p>
+			<label for="wpcv-end-month"><strong><?php esc_html_e( 'End month (optional)', 'wpcv' ); ?></strong></label>
+			<select id="wpcv-end-month" name="_wpcv_end_month">
+				<option value="0"><?php esc_html_e( 'Not specified', 'wpcv' ); ?></option>
+				<?php for ( $number = 1; $number <= 12; $number++ ) : ?>
+					<option value="<?php echo esc_attr( $number ); ?>" <?php selected( (int) get_post_meta( $post->ID, '_wpcv_end_month', true ), $number ); ?>><?php echo esc_html( $wp_locale->get_month( $number ) ); ?></option>
+				<?php endfor; ?>
+			</select>
+			<label for="wpcv-end-year"><strong><?php esc_html_e( 'End year (optional)', 'wpcv' ); ?></strong></label>
+			<input id="wpcv-end-year" name="_wpcv_end_year" type="number" min="1" max="9999" value="<?php echo esc_attr( get_post_meta( $post->ID, '_wpcv_end_year', true ) ?: '' ); ?>" style="width:7em">
+		</p>
+		<p>
+			<label for="wpcv-date-label"><strong><?php esc_html_e( 'Date display override (optional)', 'wpcv' ); ?></strong></label>
+			<input id="wpcv-date-label" name="_wpcv_date_label" type="text" class="widefat" value="<?php echo esc_attr( get_post_meta( $post->ID, '_wpcv_date_label', true ) ); ?>">
+			<span class="description"><?php esc_html_e( 'Preserve a source label or multiple occurrences, such as Jan 2018, Oct 2017. Sorting uses the numeric dates; for separate occurrences enter the latest occurrence as the start date.', 'wpcv' ); ?></span>
+		</p>
+		<p>
+			<label for="wpcv-ongoing-as-of"><strong><?php esc_html_e( 'Ongoing as of year (optional)', 'wpcv' ); ?></strong></label>
+			<input id="wpcv-ongoing-as-of" name="_wpcv_ongoing_as_of" type="number" min="1" max="9999" value="<?php echo esc_attr( get_post_meta( $post->ID, '_wpcv_ongoing_as_of', true ) ?: '' ); ?>" style="width:7em">
+			<span class="description"><?php esc_html_e( 'Use for an open-ended date in a historical CV. The display explicitly says as of this year; it does not claim the role continues today. Ranges sort by their latest dated endpoint.', 'wpcv' ); ?></span>
+		</p>
 		<p>
 			<label for="wpcv-url"><strong><?php esc_html_e( 'URL link', 'wpcv' ); ?></strong></label>
 			<input id="wpcv-url" name="_wpcv_url" type="url" class="widefat" placeholder="https://" value="<?php echo esc_attr( get_post_meta( $post->ID, '_wpcv_url', true ) ); ?>">
@@ -160,6 +185,16 @@ final class Entries {
 			<label for="wpcv-location"><strong><?php esc_html_e( 'Location', 'wpcv' ); ?></strong></label>
 			<input id="wpcv-location" name="_wpcv_location" type="text" class="widefat" value="<?php echo esc_attr( get_post_meta( $post->ID, '_wpcv_location', true ) ); ?>">
 		</p>
+		<?php if ( get_post_meta( $post->ID, '_wpcv_import_source_id', true ) ) : ?>
+			<hr>
+			<p><strong><?php esc_html_e( 'Import source', 'wpcv' ); ?></strong>: <?php echo esc_html( get_post_meta( $post->ID, '_wpcv_import_source_id', true ) ); ?></p>
+			<p><?php echo esc_html( get_post_meta( $post->ID, '_wpcv_import_source_document', true ) ); ?> · <?php esc_html_e( 'Page', 'wpcv' ); ?> <?php echo esc_html( get_post_meta( $post->ID, '_wpcv_import_source_page', true ) ); ?></p>
+			<p><?php esc_html_e( 'Original date:', 'wpcv' ); ?> <?php echo esc_html( get_post_meta( $post->ID, '_wpcv_import_source_date_text', true ) ); ?></p>
+			<?php foreach ( (array) get_post_meta( $post->ID, '_wpcv_import_review_notes', true ) as $note ) : ?>
+				<p class="description"><?php echo esc_html( $note ); ?></p>
+			<?php endforeach; ?>
+			<details><summary><?php esc_html_e( 'Extracted source text', 'wpcv' ); ?></summary><pre style="white-space:pre-wrap"><?php echo esc_html( get_post_meta( $post->ID, '_wpcv_import_source_text', true ) ); ?></pre></details>
+		<?php endif; ?>
 		<?php
 	}
 
@@ -180,17 +215,41 @@ final class Entries {
 
 	public static function date_value( int $post_id ): int {
 		$year = self::sanitize_year( get_post_meta( $post_id, '_wpcv_year', true ) );
-		return $year ? $year * 100 + self::sanitize_month( get_post_meta( $post_id, '_wpcv_month', true ) ) : 0;
+		if ( ! $year ) {
+			return 0;
+		}
+		$start = $year * 100 + self::sanitize_month( get_post_meta( $post_id, '_wpcv_month', true ) );
+		$end_year = self::sanitize_year( get_post_meta( $post_id, '_wpcv_end_year', true ) );
+		$end = $end_year ? $end_year * 100 + self::sanitize_month( get_post_meta( $post_id, '_wpcv_end_month', true ) ) : 0;
+		$as_of = self::sanitize_year( get_post_meta( $post_id, '_wpcv_ongoing_as_of', true ) );
+		return max( $start, $end, $as_of * 100 );
 	}
 
 	public static function date_label( int $post_id ): string {
-		global $wp_locale;
 		$year  = self::sanitize_year( get_post_meta( $post_id, '_wpcv_year', true ) );
 		$month = self::sanitize_month( get_post_meta( $post_id, '_wpcv_month', true ) );
-		if ( ! $year ) {
-			return __( 'Undated', 'wpcv' );
+		$label = (string) get_post_meta( $post_id, '_wpcv_date_label', true );
+		$as_of = self::sanitize_year( get_post_meta( $post_id, '_wpcv_ongoing_as_of', true ) );
+		if ( '' === $label ) {
+			$label = self::format_date( $year, $month );
+			$end_year = self::sanitize_year( get_post_meta( $post_id, '_wpcv_end_year', true ) );
+			$end_month = self::sanitize_month( get_post_meta( $post_id, '_wpcv_end_month', true ) );
+			if ( $year && $end_year && $end_year * 100 + $end_month >= $year * 100 + $month ) {
+				$label .= '–' . self::format_date( $end_year, $end_month );
+			} elseif ( $year && $as_of >= $year ) {
+				$label .= '–' . __( 'present', 'wpcv' );
+			}
 		}
-		return $month ? $wp_locale->get_month( $month ) . ' ' . $year : (string) $year;
+		if ( $as_of ) {
+			/* translators: 1: date label, 2: year of the source document. */
+			$label = sprintf( __( '%1$s (as of %2$d)', 'wpcv' ), $label, $as_of );
+		}
+		return $label;
+	}
+
+	private static function format_date( int $year, int $month ): string {
+		global $wp_locale;
+		return $year ? ( $month ? $wp_locale->get_month( $month ) . ' ' . $year : (string) $year ) : __( 'Undated', 'wpcv' );
 	}
 
 	public static function columns( array $columns ): array {

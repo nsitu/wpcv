@@ -41,7 +41,7 @@ jobs:
       - uses: shivammathur/setup-php@bf6b4fbd49ca58e4608c9c89fba0b8d90bd2a39f # 2.35.5
         with:
           php-version: '8.2'
-          extensions: mysqli, dom
+          extensions: mysqli, dom, gd
           coverage: none
       - name: Lint PHP
         run: find plugin/wpcv tests -type f -name '*.php' -print0 | xargs -0 -n1 php -l
@@ -68,6 +68,7 @@ jobs:
           php dist/wp-cli.phar core install --path="$WP_TEST_PATH" --url=http://localhost --title='CV test' --admin_user=cv-admin --admin_password=local-test-only --admin_email=test@example.org --skip-email
           php dist/wp-cli.phar plugin install "$GITHUB_WORKSPACE/dist/wpcv.zip" --activate --path="$WP_TEST_PATH"
           php dist/wp-cli.phar eval-file "$GITHUB_WORKSPACE/tests/wordpress-integration.php" --path="$WP_TEST_PATH"
+          php dist/wp-cli.phar eval-file "$GITHUB_WORKSPACE/tests/import-integration.php" --path="$WP_TEST_PATH"
 
   deploy:
     name: Deploy to WordPress
