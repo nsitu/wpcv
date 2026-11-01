@@ -15,7 +15,7 @@ After deployment, open **CV Entries > Add CV Entry**. The content model uses one
 | Entry context | CV entry details: venue, organization, role, or publication |
 | Month and year | CV entry details; these determine CV order independently of the publish date |
 | End month/year and date display override | Optional ranges or original labels for multiple occurrences |
-| Ongoing as of year | Historical source year for an open-ended role; does not imply it continues today |
+| Ongoing | Simple checkbox for an entry that continues to the present; leave its end date blank |
 | URL link and location | CV entry details |
 | Categories | CV Categories panel; an entry may have multiple categories |
 
@@ -27,9 +27,9 @@ Add a **Shortcode block** to the page where the CV belongs:
 [wpcv]
 ```
 
-The shortcode displays every published, non-password-protected CV entry, newest first by its latest numeric CV endpoint (start, optional end, or historical ongoing-as-of year). Use `[wpcv order="ASC"]` for oldest first. Entries without a start year appear last in either order. A year without a month is supported: it sorts before January in ascending order and after January in descending order. Equal dates retain a stable creation-ID order.
+The shortcode displays every published, non-password-protected CV entry, newest first by its latest CV endpoint (start, optional end, or the current month/year for ongoing entries). Use `[wpcv order="ASC"]` for oldest first. Entries without a start year appear last in either order. A year without a month is supported: it sorts before January in ascending order and after January in descending order. Equal dates retain a stable creation-ID order.
 
-Use a date display override to preserve source wording such as `Jan 2018, Oct 2017`; for separate occurrences, enter the latest occurrence in the numeric start fields. Overrides change the display, while numeric dates determine sorting. An ongoing-as-of year always appends an explicit qualifier, for example `2003-present (as of 2022)`.
+Use a date display override to preserve source wording such as `Jan 2018, Oct 2017`; for separate occurrences, enter the latest occurrence in the numeric start fields. Overrides change the display, while numeric dates determine sorting. Ongoing roles display as `2003-present` and are treated as current regardless of the original CV's date. Existing imports with the former ongoing-year metadata automatically follow this behavior.
 
 Category buttons filter entries instantly, with an **All** button to reset the list. Only categories used by displayed entries become filters. Uncategorized entries appear under All. Long descriptions expand through **Read more**; URL links open in the current tab. The complete list and expandable descriptions work without JavaScript. Multiple shortcodes on one page have independent filters. Entries are displayed through the shortcode; they do not create standalone public entry pages or archives.
 

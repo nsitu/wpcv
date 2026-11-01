@@ -42,6 +42,12 @@ def main() -> None:
         raise SystemExit("Invalid manifest schema or dataset ID.")
     if data["source"]["sha256"] != digest(args.pdf):
         raise SystemExit("Source PDF checksum differs from the reviewed manifest.")
+    for record in data["entries"]:
+        record["ongoing"] = record.get("ongoing", bool(record.get("ongoing_as_of")))
+        record.pop("ongoing_as_of", None)
+        record["review_notes"] = [note for note in record["review_notes"] if not note.startswith("Open-ended in the January 2022 source. This does not establish")]
+        if record["ongoing"] and re.search(r"[-–—]\s*$", record["date_label"]):
+            record["date_label"] += "present"
 
     output = args.output.resolve()
     thumbnails = output / "thumbnails"
@@ -84,7 +90,7 @@ def main() -> None:
             image_spec["sha256"] = digest(target)
 
     (output / "entries.json").write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    columns = ["id", "title", "categories", "source_date_text", "year", "month", "end_year", "end_month", "ongoing_as_of", "date_label", "summary", "description", "context", "location", "url", "source_page", "review_notes", "thumbnail"]
+    columns = ["id", "title", "categories", "source_date_text", "year", "month", "end_year", "end_month", "ongoing", "date_label", "summary", "description", "context", "location", "url", "source_page", "review_notes", "thumbnail"]
     with (output / "review.csv").open("w", newline="", encoding="utf-8-sig") as stream:
         writer = csv.DictWriter(stream, fieldnames=columns)
         writer.writeheader()
@@ -100,8 +106,8 @@ def main() -> None:
     for index, record in enumerate(data["entries"], 1):
         notes = "".join(f"<li>{esc(note)}</li>" for note in record["review_notes"])
         dates = f"Start: {record['year'] or 'unknown'} / {record['month'] or 'unspecified'}; end: {record['end_year'] or 'none'} / {record['end_month'] or 'unspecified'}"
-        if record["ongoing_as_of"]:
-            dates += f"; ongoing only as of {record['ongoing_as_of']}"
+        if record["ongoing"]:
+            dates += "; ongoing to the present"
         description = f"<p>{esc(record['description'])}</p>" if record["description"] else ""
         link = f"<a href=\"{esc(record['url'])}\">{esc(record['url'])}</a>" if record["url"].startswith(("https://", "http://")) else "No link in source"
         sections.append(f"""<article><img src="{esc(record['thumbnail']['path'])}" alt="{esc(record['thumbnail']['alt'])}"><div>

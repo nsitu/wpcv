@@ -1,7 +1,7 @@
 === WPCV ===
 Requires at least: 6.5
 Requires PHP: 8.2
-Stable tag: 0.4.0
+Stable tag: 0.4.1
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -22,8 +22,8 @@ filter the list without a page reload. Long descriptions expand using Read more.
 All entries and descriptions remain accessible without JavaScript.
 
 Entry details support optional end dates, date display overrides for separate
-occurrences, and an ongoing-as-of year for historical CV snapshots. Historical
-open-ended roles display the source year rather than claiming current status.
+occurrences, and a simple Ongoing checkbox. Open-ended roles continue to the
+present and sort using the current month/year, including older imports.
 
 Dashboard: open CV Entries > Import, upload JSON or a ZIP containing entries.json
 and thumbnails, and review the preview. Click Import as drafts to create entries
@@ -49,6 +49,11 @@ to move unchanged drafts to Trash. Published/edited entries and media are kept.
 5. Place [wpcv] in a page and publish it.
 
 == Changelog ==
+
+= 0.4.1 =
+* Replace the ongoing-as-of year with a simple Ongoing checkbox.
+* Treat open-ended roles as current and remove source-year qualifiers.
+* Preserve compatibility with older import packages and existing entries.
 
 = 0.4.0 =
 * Dashboard import UI with JSON/ZIP uploads, private thumbnail previews, review

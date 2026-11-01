@@ -19,6 +19,7 @@ final class Entries {
 		add_action( 'after_setup_theme', array( self::class, 'support_thumbnails' ), 20 );
 		add_action( 'add_meta_boxes_' . self::POST_TYPE, array( self::class, 'add_meta_box' ) );
 		add_action( 'save_post_' . self::POST_TYPE, array( self::class, 'save' ) );
+		add_filter( 'default_post_metadata', array( self::class, 'ongoing_default' ), 20, 4 );
 		add_filter( 'manage_' . self::POST_TYPE . '_posts_columns', array( self::class, 'columns' ) );
 		add_action( 'manage_' . self::POST_TYPE . '_posts_custom_column', array( self::class, 'column_value' ), 10, 2 );
 	}
@@ -74,7 +75,7 @@ final class Entries {
 				'type'              => $field['type'],
 				'single'            => true,
 				'revisions_enabled' => true,
-				'default'           => 'integer' === $field['type'] ? 0 : '',
+				'default'           => 'integer' === $field['type'] ? 0 : ( 'boolean' === $field['type'] ? false : '' ),
 				'sanitize_callback' => $field['sanitize'],
 				'auth_callback'     => static function ( $allowed, $meta_key, $post_id ): bool {
 					return current_user_can( 'edit_post', (int) $post_id );
@@ -98,7 +99,7 @@ final class Entries {
 			'_wpcv_end_month' => array( 'type' => 'integer', 'sanitize' => array( self::class, 'sanitize_month' ), 'max' => 12 ),
 			'_wpcv_end_year' => array( 'type' => 'integer', 'sanitize' => array( self::class, 'sanitize_year' ), 'max' => 9999 ),
 			'_wpcv_date_label' => array( 'type' => 'string', 'sanitize' => 'sanitize_text_field' ),
-			'_wpcv_ongoing_as_of' => array( 'type' => 'integer', 'sanitize' => array( self::class, 'sanitize_year' ), 'max' => 9999 ),
+			'_wpcv_ongoing' => array( 'type' => 'boolean', 'sanitize' => 'rest_sanitize_boolean' ),
 			'_wpcv_url'      => array( 'type' => 'string', 'sanitize' => array( self::class, 'sanitize_url' ) ),
 			'_wpcv_location' => array( 'type' => 'string', 'sanitize' => 'sanitize_text_field' ),
 		);
@@ -173,9 +174,9 @@ final class Entries {
 			<span class="description"><?php esc_html_e( 'Preserve a source label or multiple occurrences, such as Jan 2018, Oct 2017. Sorting uses the numeric dates; for separate occurrences enter the latest occurrence as the start date.', 'wpcv' ); ?></span>
 		</p>
 		<p>
-			<label for="wpcv-ongoing-as-of"><strong><?php esc_html_e( 'Ongoing as of year (optional)', 'wpcv' ); ?></strong></label>
-			<input id="wpcv-ongoing-as-of" name="_wpcv_ongoing_as_of" type="number" min="1" max="9999" value="<?php echo esc_attr( get_post_meta( $post->ID, '_wpcv_ongoing_as_of', true ) ?: '' ); ?>" style="width:7em">
-			<span class="description"><?php esc_html_e( 'Use for an open-ended date in a historical CV. The display explicitly says as of this year; it does not claim the role continues today. Ranges sort by their latest dated endpoint.', 'wpcv' ); ?></span>
+			<input type="hidden" name="_wpcv_ongoing" value="0">
+			<label for="wpcv-ongoing"><input id="wpcv-ongoing" name="_wpcv_ongoing" type="checkbox" value="1" <?php checked( self::is_ongoing( $post->ID ) ); ?>> <strong><?php esc_html_e( 'Ongoing', 'wpcv' ); ?></strong></label>
+			<span class="description"><?php esc_html_e( 'The entry continues to the present. Leave the end date blank. Ongoing entries sort by the current month and year.', 'wpcv' ); ?></span>
 		</p>
 		<p>
 			<label for="wpcv-url"><strong><?php esc_html_e( 'URL link', 'wpcv' ); ?></strong></label>
@@ -190,7 +191,7 @@ final class Entries {
 			<p><strong><?php esc_html_e( 'Import source', 'wpcv' ); ?></strong>: <?php echo esc_html( get_post_meta( $post->ID, '_wpcv_import_source_id', true ) ); ?></p>
 			<p><?php echo esc_html( get_post_meta( $post->ID, '_wpcv_import_source_document', true ) ); ?> · <?php esc_html_e( 'Page', 'wpcv' ); ?> <?php echo esc_html( get_post_meta( $post->ID, '_wpcv_import_source_page', true ) ); ?></p>
 			<p><?php esc_html_e( 'Original date:', 'wpcv' ); ?> <?php echo esc_html( get_post_meta( $post->ID, '_wpcv_import_source_date_text', true ) ); ?></p>
-			<?php foreach ( (array) get_post_meta( $post->ID, '_wpcv_import_review_notes', true ) as $note ) : ?>
+			<?php foreach ( self::review_notes( (array) get_post_meta( $post->ID, '_wpcv_import_review_notes', true ) ) as $note ) : ?>
 				<p class="description"><?php echo esc_html( $note ); ?></p>
 			<?php endforeach; ?>
 			<details><summary><?php esc_html_e( 'Extracted source text', 'wpcv' ); ?></summary><pre style="white-space:pre-wrap"><?php echo esc_html( get_post_meta( $post->ID, '_wpcv_import_source_text', true ) ); ?></pre></details>
@@ -218,18 +219,21 @@ final class Entries {
 		if ( ! $year ) {
 			return 0;
 		}
+		if ( self::is_ongoing( $post_id ) ) {
+			return (int) current_time( 'Ym' );
+		}
 		$start = $year * 100 + self::sanitize_month( get_post_meta( $post_id, '_wpcv_month', true ) );
 		$end_year = self::sanitize_year( get_post_meta( $post_id, '_wpcv_end_year', true ) );
 		$end = $end_year ? $end_year * 100 + self::sanitize_month( get_post_meta( $post_id, '_wpcv_end_month', true ) ) : 0;
-		$as_of = self::sanitize_year( get_post_meta( $post_id, '_wpcv_ongoing_as_of', true ) );
-		return max( $start, $end, $as_of * 100 );
+		return max( $start, $end );
 	}
 
 	public static function date_label( int $post_id ): string {
 		$dates = array();
-		foreach ( array( 'year', 'month', 'date_label', 'ongoing_as_of', 'end_year', 'end_month' ) as $key ) {
+		foreach ( array( 'year', 'month', 'date_label', 'end_year', 'end_month' ) as $key ) {
 			$dates[ $key ] = get_post_meta( $post_id, '_wpcv_' . $key, true );
 		}
+		$dates['ongoing'] = self::is_ongoing( $post_id );
 		return self::format_date_values( $dates );
 	}
 
@@ -237,22 +241,49 @@ final class Entries {
 		$year  = self::sanitize_year( $dates['year'] ?? 0 );
 		$month = self::sanitize_month( $dates['month'] ?? 0 );
 		$label = (string) ( $dates['date_label'] ?? '' );
-		$as_of = self::sanitize_year( $dates['ongoing_as_of'] ?? 0 );
+		$ongoing = self::ongoing_value( $dates );
 		if ( '' === $label ) {
 			$label = self::format_date( $year, $month );
 			$end_year = self::sanitize_year( $dates['end_year'] ?? 0 );
 			$end_month = self::sanitize_month( $dates['end_month'] ?? 0 );
-			if ( $year && $end_year && $end_year * 100 + $end_month >= $year * 100 + $month ) {
-				$label .= '–' . self::format_date( $end_year, $end_month );
-			} elseif ( $year && $as_of >= $year ) {
+			if ( $year && $ongoing ) {
 				$label .= '–' . __( 'present', 'wpcv' );
+			} elseif ( $year && $end_year && $end_year * 100 + $end_month >= $year * 100 + $month ) {
+				$label .= '–' . self::format_date( $end_year, $end_month );
 			}
 		}
-		if ( $as_of ) {
-			/* translators: 1: date label, 2: year of the source document. */
-			$label = sprintf( __( '%1$s (as of %2$d)', 'wpcv' ), $label, $as_of );
+		if ( $ongoing && preg_match( '/[-–—]\s*$/u', $label ) ) {
+			$label .= __( 'present', 'wpcv' );
 		}
 		return $label;
+	}
+
+	public static function ongoing_value( array $dates ): bool {
+		if ( array_key_exists( 'ongoing', $dates ) ) {
+			return rest_sanitize_boolean( $dates['ongoing'] );
+		}
+		// Older imports remain current without a destructive metadata migration.
+		return self::sanitize_year( $dates['ongoing_as_of'] ?? 0 ) > 0 || (bool) preg_match( '/\b(?:present|current)\b|[-–—]\s*$/iu', (string) ( $dates['date_label'] ?? '' ) );
+	}
+
+	public static function is_ongoing( int $post_id ): bool {
+		$dates = array( 'date_label' => get_post_meta( $post_id, '_wpcv_date_label', true ), 'ongoing_as_of' => get_post_meta( $post_id, '_wpcv_ongoing_as_of', true ) );
+		if ( metadata_exists( 'post', $post_id, '_wpcv_ongoing' ) ) {
+			$dates['ongoing'] = get_post_meta( $post_id, '_wpcv_ongoing', true );
+		}
+		return self::ongoing_value( $dates );
+	}
+
+	public static function ongoing_default( $value, int $post_id, string $key, bool $single ) {
+		if ( '_wpcv_ongoing' !== $key || self::POST_TYPE !== get_post_type( $post_id ) ) {
+			return $value;
+		}
+		$ongoing = self::is_ongoing( $post_id );
+		return $single ? $ongoing : array( $ongoing );
+	}
+
+	public static function review_notes( array $notes ): array {
+		return array_values( array_filter( $notes, static fn ( $note ): bool => is_string( $note ) && ! str_starts_with( $note, 'Open-ended in the January 2022 source. This does not establish' ) ) );
 	}
 
 	private static function format_date( int $year, int $month ): string {

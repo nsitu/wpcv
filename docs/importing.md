@@ -1,16 +1,16 @@
 # Reviewed CV imports
 
-WPCV 0.4.0 provides dashboard imports and optional WP-CLI commands. **Normal code deployments never import or publish content.** Dashboard imports present a preview before draft creation; CLI commands preview by default. Both workflows skip existing source IDs, including entries in Trash. Dashboard imports require an administrator with media-upload permission.
+WPCV 0.4.1 provides dashboard imports and optional WP-CLI commands. **Normal code deployments never import or publish content.** Dashboard imports present a preview before draft creation; CLI commands preview by default. Both workflows skip existing source IDs, including entries in Trash. Dashboard imports require an administrator with media-upload permission.
 
 ## Import through the dashboard
 
-1. Deploy WPCV 0.4.0 and open **CV Entries > Import**.
+1. Deploy WPCV 0.4.1 and open **CV Entries > Import**.
 2. Choose **`harold-sikkema-cv-2022-import.zip`** to upload the prepared entries and thumbnails together. Do not extract it first for dashboard uploads. For JSON without local images, choose the `.json` file instead. If JSON contains thumbnail references but you are not uploading images, explicitly select **Import text only and ignore thumbnail references**; images can be added manually later.
 3. Click **Upload and preview**. Review the entry titles, dates, categories, thumbnails, proposed actions, and highlighted review notes. This step creates no CV entries or media attachments. The preview is accessible only to the administrator who uploaded it.
 4. Click **Import as drafts**. Progress updates as the importer works in small batches. If the connection is interrupted, reload the preview URL and use **Resume import**. Successful records remain drafts and matching source IDs are never imported twice.
 5. Click **Review CV entries** on the result page. When drafts were created, this link filters the entry list to that batch. Edit and publish the selected drafts using the normal WordPress controls.
 
-The existing package has 37 entries, 37 thumbnail files, and nine entries with review notes. Reuploading it safely skips source IDs already present; manual edits are preserved. A text-only import followed by a ZIP import also skips those entries, so add any omitted images to the drafts manually.
+The existing package has 37 entries, 37 thumbnail files, and seven entries with review notes. Reuploading it safely skips source IDs already present; manual edits are preserved. A text-only import followed by a ZIP import also skips those entries, so add any omitted images to the drafts manually.
 
 The page shows the server's effective file-upload limit, capped at 25 MB by the dashboard importer. ZIPs may contain at most 1,000 entries, with at most 100 MB expanded total and 20 MB per file; JSON manifests are limited to 10 MB. Archives are inspected for unsafe paths, links, special files, duplicate names, encryption, unsupported file types, and excessive expansion before extraction. Optional review HTML/CSV files are ignored, never extracted or served. Raster images remain subject to the shared importer's checksum/type/dimension checks.
 
@@ -28,7 +28,7 @@ The locally prepared content is under the ignored `output/import/` directory:
 
 The package represents the January 7, 2022 PDF snapshot. Its 37 records comprise 22 exhibition/performance/publication entries, two degrees, and 13 teaching/professional roles. The two roles nested under nsitu.ca are separate entries. Cloud Storage retains two separate occurrences in one record, sorted by the latest occurrence; its source dates are not treated as a continuous range.
 
-Nine records carry explicit review notes. These cover inferred categories, Cloud Storage's occurrences, a source location that needs confirmation, and the open-ended CKA/nsitu roles. Historical open-ended dates display `as of 2022`. Source domains have HTTPS prefixes inferred from the printed text; destinations have not been checked. Missing months remain unspecified. The source contact header is excluded.
+Seven records carry explicit review notes. These cover inferred categories, Cloud Storage's occurrences, a source location that needs confirmation, and the grouping of the nsitu roles. Open-ended roles are assumed current and display `present`, regardless of the source document's year. Source domains have HTTPS prefixes inferred from the printed text; destinations have not been checked. Missing months remain unspecified. The source contact header is excluded.
 
 Review or edit `entries.json` before import, or review and edit the resulting drafts in WordPress afterward. The importer retains each source record and its review notes in post metadata; the entry editor shows the source page, original date, notes, and extracted source text. Initial category assignments are suggestions and can be changed in WordPress.
 
@@ -138,7 +138,7 @@ On CapRover, use the `wp_cv` helper above while its staging directory still exis
 
 ## Manifest format
 
-The minimal schema is illustrated below; the actual review package includes source bounds, image checksums, notes, and additional provenance. Optional text fields default to empty strings; optional numeric dates default to zero (unspecified). Source IDs are stable strings using lowercase letters, digits, hyphens, and underscores. Dates must be JSON integers, not strings.
+The minimal schema is illustrated below; the actual review package includes source bounds, image checksums, notes, and additional provenance. Optional text fields default to empty strings; optional numeric dates default to zero (unspecified). Source IDs are stable strings using lowercase letters, digits, hyphens, and underscores. Dates must be JSON integers, not strings; `ongoing` is a JSON boolean. Set it to true and leave the end date unspecified for a current role. Older packages using `ongoing_as_of` are also accepted and treated as ongoing.
 
 ```json
 {
@@ -161,7 +161,7 @@ The minimal schema is illustrated below; the actual review package includes sour
       "month": 5,
       "end_year": 2021,
       "end_month": 6,
-      "ongoing_as_of": 0,
+      "ongoing": false,
       "date_label": "May-Jun 2021",
       "categories": ["Exhibition"],
       "source_page": 1,

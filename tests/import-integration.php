@@ -27,11 +27,11 @@ $base = array(
 	'id' => 'first', 'title' => 'Imported exhibition', 'summary' => 'Short description', 'description' => 'Long description with <literal> text.',
 	'context' => "R&D\\Studio", 'location' => 'Test city', 'url' => 'https://example.org/work',
 	'year' => 2014, 'month' => 5, 'end_year' => 2014, 'end_month' => 6, 'date_label' => 'May-Jun 2014',
-	'ongoing_as_of' => 0, 'categories' => array( 'Import test category' ), 'source_page' => 1,
+	'ongoing' => false, 'categories' => array( 'Import test category' ), 'source_page' => 1,
 	'source_text' => 'Original source words', 'source_date_text' => 'May-Jun 2014', 'review_notes' => array( 'Review the category.' ),
 	'thumbnail' => array( 'path' => 'image.png', 'sha256' => hash_file( 'sha256', $directory . '/image.png' ), 'alt' => 'Test logo' ),
 );
-$second = array_replace( $base, array( 'id' => 'second', 'title' => 'Historical ongoing role', 'year' => 2003, 'month' => 0, 'end_year' => 0, 'end_month' => 0, 'ongoing_as_of' => 2022, 'date_label' => '2003-present' ) );
+$second = array_replace( $base, array( 'id' => 'second', 'title' => 'Ongoing role', 'year' => 2003, 'month' => 0, 'end_year' => 0, 'end_month' => 0, 'ongoing' => true, 'date_label' => '2003-present' ) );
 $data = array( 'schema_version' => 1, 'dataset_id' => $dataset, 'source' => array( 'document' => 'synthetic-test.pdf', 'sha256' => str_repeat( 'a', 64 ) ), 'entries' => array( $base, $second ) );
 $write = static function ( array $payload ) use ( $file ): void {
 	file_put_contents( $file, wp_json_encode( $payload ) );
@@ -75,6 +75,16 @@ try {
 	$invalid['entries'][0]['url'] = 'javascript:alert(1)';
 	$write( $invalid );
 	$assert( is_wp_error( Importer::load( $file ) ), 'Non-HTTP URL protocols are rejected.' );
+	$invalid = $data;
+	$invalid['entries'][1]['ongoing'] = 'true';
+	$write( $invalid );
+	$assert( is_wp_error( Importer::load( $file ) ), 'Ongoing must be a boolean.' );
+	$legacy = $data;
+	unset( $legacy['entries'][1]['ongoing'] );
+	$legacy['entries'][1]['ongoing_as_of'] = 2022;
+	$write( $legacy );
+	$loaded = Importer::load( $file );
+	$assert( ! is_wp_error( $loaded ) && true === $loaded['entries'][1]['ongoing'] && ! isset( $loaded['entries'][1]['ongoing_as_of'] ), 'Older JSON date fields map to an ongoing flag.' );
 
 	$write( $data );
 	add_option( 'wpcv_import_lock', 'another-process', '', false );
@@ -89,13 +99,27 @@ try {
 	$assert( 'draft' === get_post_status( $first_id ) && 'draft' === get_post_status( $second_id ), 'Import never publishes entries.' );
 	$assert( "R&D\\Studio" === get_post_meta( $first_id, '_wpcv_context', true ), 'Imported text preserves backslashes.' );
 	$assert( 201406 === Entries::date_value( $first_id ) && 'May-Jun 2014' === Entries::date_label( $first_id ), 'Completed ranges sort by the end date and preserve their label.' );
-	$assert( 202200 === Entries::date_value( $second_id ) && '2003-present (as of 2022)' === Entries::date_label( $second_id ), 'Historical ongoing dates do not claim current status.' );
+	$assert( (int) current_time( 'Ym' ) === Entries::date_value( $second_id ) && '2003-present' === Entries::date_label( $second_id ), 'Ongoing roles remain current without a source-year qualifier.' );
 	$assert( get_post_thumbnail_id( $first_id ) > 0 && get_post_thumbnail_id( $first_id ) === get_post_thumbnail_id( $second_id ), 'Equal image hashes reuse one media attachment.' );
 	$assert( 1 === count( wp_get_object_terms( $first_id, Entries::TAXONOMY ) ), 'Categories are assigned.' );
 	$source_record = json_decode( get_post_meta( $first_id, '_wpcv_import_record', true ), true );
 	$assert( $source_record['source_text'] === $base['source_text'] && ! isset( $source_record['_image_path'] ), 'Source records are retained without server-local paths.' );
 	$repeat = Importer::run( $file, true, $batch );
 	$assert( ! is_wp_error( $repeat ) && 2 === $repeat['skipped'] && 0 === $repeat['created'], 'Reruns do not duplicate posts.' );
+
+	// Simulate an unchanged entry imported before the ongoing-year setting was removed.
+	delete_post_meta( $second_id, '_wpcv_ongoing' );
+	update_post_meta( $second_id, '_wpcv_ongoing_as_of', 2022 );
+	$assert( Entries::is_ongoing( $second_id ) && (int) current_time( 'Ym' ) === Entries::date_value( $second_id ) && '2003-present' === Entries::date_label( $second_id ), 'Legacy entries automatically display as current.' );
+	$post = get_post( $second_id );
+	$legacy_values = array( $post->post_title, $post->post_excerpt, $post->post_content, $post->post_author, get_post_thumbnail_id( $second_id ) );
+	foreach ( array( 'context', 'month', 'year', 'end_month', 'end_year', 'date_label', 'ongoing_as_of', 'url', 'location' ) as $key ) {
+		$legacy_values[] = (string) get_post_meta( $second_id, '_wpcv_' . $key, true );
+	}
+	$legacy_terms = wp_get_object_terms( $second_id, Entries::TAXONOMY, array( 'fields' => 'ids' ) );
+	sort( $legacy_terms, SORT_NUMERIC );
+	$legacy_values[] = $legacy_terms;
+	update_post_meta( $second_id, '_wpcv_import_fingerprint', hash( 'sha256', wp_json_encode( $legacy_values ) ) );
 
 	wp_update_post( array( 'ID' => $first_id, 'post_title' => 'Manually edited title' ) );
 	$data['entries'][0]['title'] = 'Changed source title';

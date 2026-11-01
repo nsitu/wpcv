@@ -96,6 +96,16 @@ try {
 	$assert( 202511 === Entries::date_value( $late ), 'Users without edit permission cannot update entry details.' );
 	wp_set_current_user( $admins[0]->ID );
 	$_POST = array();
+	update_post_meta( $year_only, '_wpcv_ongoing_as_of', 2025 );
+	$assert( Entries::is_ongoing( $year_only ), 'Legacy ongoing metadata is recognized.' );
+	$assert( true === get_post_meta( $year_only, '_wpcv_ongoing', true ), 'The editor and REST metadata also see legacy roles as ongoing.' );
+	$_POST = array( 'wpcv_nonce' => wp_create_nonce( 'wpcv_save_entry' ), '_wpcv_ongoing' => '1' );
+	Entries::save( $year_only );
+	$assert( Entries::is_ongoing( $year_only ) && '2025–present' === Entries::date_label( $year_only ), 'The ongoing checkbox saves and renders a current range.' );
+	$_POST['_wpcv_ongoing'] = '0';
+	Entries::save( $year_only );
+	$assert( ! Entries::is_ongoing( $year_only ) && 202500 === Entries::date_value( $year_only ), 'Unchecking ongoing overrides legacy metadata.' );
+	$_POST = array();
 
 	$assert( 0 === Entries::sanitize_month( 13 ) && 0 === Entries::sanitize_month( -1 ), 'Invalid months are rejected.' );
 	$assert( 0 === Entries::sanitize_year( 10000 ) && 0 === Entries::sanitize_year( '2.5' ), 'Invalid years are rejected.' );

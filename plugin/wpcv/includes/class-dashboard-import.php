@@ -269,6 +269,13 @@ final class Dashboard_Import {
 		if ( ! is_array( $state ) || $state['user_id'] !== get_current_user_id() || $state['expires'] <= time() ) {
 			return new \WP_Error( 'wpcv_expired', __( 'This preview has expired or belongs to another user. Upload the package again; existing entries will be skipped.', 'wpcv' ) );
 		}
+		// Keep previews staged by older plugin versions consistent after an upgrade.
+		foreach ( $state['rows'] as &$row ) {
+			$row['notes'] = implode( ' | ', Entries::review_notes( explode( ' | ', $row['notes'] ) ) );
+			$label = preg_replace( '/\s*\(as of \d{4}\)$/', '', $row['date'], -1, $removed );
+			$row['date'] = $removed && preg_match( '/[-–—]\s*$/u', $label ) ? $label . __( 'present', 'wpcv' ) : $label;
+		}
+		unset( $row );
 		return $state;
 	}
 

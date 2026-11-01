@@ -11,7 +11,7 @@ defined( 'ABSPATH' ) || exit;
 
 final class Importer {
 
-	private const META = array( 'context', 'month', 'year', 'end_month', 'end_year', 'date_label', 'ongoing_as_of', 'url', 'location' );
+	private const META = array( 'context', 'month', 'year', 'end_month', 'end_year', 'date_label', 'ongoing', 'url', 'location' );
 
 	/** Validate the entire package before creating any posts, terms, or media. */
 	public static function load( string $file ): array|\WP_Error {
@@ -40,14 +40,19 @@ final class Importer {
 					return new \WP_Error( 'wpcv_text', $entry['id'] . ': ' . $key . ' must be text.' );
 				}
 			}
-			foreach ( array( 'month' => 12, 'end_month' => 12, 'year' => 9999, 'end_year' => 9999, 'ongoing_as_of' => 9999, 'source_page' => 10000 ) as $key => $max ) {
+			foreach ( array( 'month' => 12, 'end_month' => 12, 'year' => 9999, 'end_year' => 9999, 'source_page' => 10000 ) as $key => $max ) {
 				$entry[ $key ] = $entry[ $key ] ?? 0;
 				if ( ! is_int( $entry[ $key ] ) || $entry[ $key ] < 0 || $entry[ $key ] > $max ) {
 					return new \WP_Error( 'wpcv_date', $entry['id'] . ': invalid ' . $key . '.' );
 				}
 			}
+			if ( array_key_exists( 'ongoing', $entry ) && ! is_bool( $entry['ongoing'] ) ) {
+				return new \WP_Error( 'wpcv_date', $entry['id'] . ': ongoing must be a JSON boolean.' );
+			}
+			$entry['ongoing'] = Entries::ongoing_value( $entry );
+			unset( $entry['ongoing_as_of'] ); // Read older packages without retaining the obsolete year setting.
 			if ( ! self::dates_valid( $entry ) ) {
-				return new \WP_Error( 'wpcv_range', $entry['id'] . ': inconsistent start, end, or ongoing-as-of dates.' );
+				return new \WP_Error( 'wpcv_range', $entry['id'] . ': inconsistent start, end, or ongoing dates.' );
 			}
 			if ( $entry['url'] && ( ! in_array( strtolower( (string) wp_parse_url( $entry['url'], PHP_URL_SCHEME ) ), array( 'http', 'https' ), true ) || ! wp_parse_url( $entry['url'], PHP_URL_HOST ) ) ) {
 				return new \WP_Error( 'wpcv_url', $entry['id'] . ': URL must be an absolute HTTP or HTTPS address.' );
@@ -63,6 +68,7 @@ final class Importer {
 					}
 				}
 			}
+			$entry['review_notes'] = Entries::review_notes( $entry['review_notes'] );
 			if ( isset( $entry['thumbnail'] ) ) {
 				$image = self::image_path( dirname( $file ), $entry['thumbnail'] );
 				if ( is_wp_error( $image ) ) {
@@ -83,7 +89,7 @@ final class Importer {
 		if ( ( $entry['month'] && ! $entry['year'] ) || ( $entry['end_month'] && ! $entry['end_year'] ) ) {
 			return false;
 		}
-		if ( ( ( $entry['end_year'] || $entry['ongoing_as_of'] ) && ! $entry['year'] ) || ( $entry['end_year'] && $entry['ongoing_as_of'] ) ) {
+		if ( ( ( $entry['end_year'] || $entry['ongoing'] ) && ! $entry['year'] ) || ( $entry['end_year'] && $entry['ongoing'] ) ) {
 			return false;
 		}
 		if ( $entry['end_year'] && $entry['end_year'] < $entry['year'] ) {
@@ -92,7 +98,7 @@ final class Importer {
 		if ( $entry['end_year'] === $entry['year'] && $entry['month'] && $entry['end_month'] && $entry['end_month'] < $entry['month'] ) {
 			return false;
 		}
-		return ! $entry['ongoing_as_of'] || $entry['ongoing_as_of'] >= $entry['year'];
+		return true;
 	}
 
 	private static function image_path( string $directory, $image ): string|\WP_Error {
@@ -131,6 +137,25 @@ final class Importer {
 		return hash( 'sha256', wp_json_encode( $entry ) );
 	}
 
+	private static function source_matches( int $post_id, array $entry ): bool {
+		if ( get_post_meta( $post_id, '_wpcv_import_input_hash', true ) === self::input_hash( $entry ) ) {
+			return true;
+		}
+		$previous = json_decode( (string) get_post_meta( $post_id, '_wpcv_import_record', true ), true );
+		if ( ! is_array( $previous ) ) { return false; }
+		$normalize = static function ( array $record ): array {
+			$record['ongoing'] = Entries::ongoing_value( $record );
+			unset( $record['ongoing_as_of'], $record['_image_path'] );
+			$record['review_notes'] = Entries::review_notes( $record['review_notes'] ?? array() );
+			if ( $record['ongoing'] && preg_match( '/[-–—]\s*$/u', $record['date_label'] ?? '' ) ) {
+				$record['date_label'] .= 'present';
+			}
+			ksort( $record );
+			return $record;
+		};
+		return $normalize( $previous ) === $normalize( $entry );
+	}
+
 	/** Preview by default; application always creates drafts and skips duplicates. */
 	public static function run( string $file, bool $apply = false, string $batch = '', int $offset = 0, int $limit = 0 ): array|\WP_Error {
 		$data = self::load( $file );
@@ -163,7 +188,7 @@ final class Importer {
 				$notes = implode( ' | ', $entry['review_notes'] );
 				if ( $existing ) {
 					$post_id = (int) $existing[0];
-					if ( get_post_meta( $post_id, '_wpcv_import_input_hash', true ) !== self::input_hash( $entry ) ) {
+					if ( ! self::source_matches( $post_id, $entry ) ) {
 						$notes = 'Source data changed; existing entry preserved. ' . $notes;
 					}
 					$action = 'skipped';
@@ -277,6 +302,8 @@ final class Importer {
 		$post = get_post( $post_id );
 		$values = array( $post->post_title, $post->post_excerpt, $post->post_content, $post->post_author, get_post_thumbnail_id( $post_id ) );
 		foreach ( self::META as $key ) {
+			// Retain rollback compatibility for unchanged entries from earlier versions.
+			$key = 'ongoing' === $key && ! metadata_exists( 'post', $post_id, '_wpcv_ongoing' ) ? 'ongoing_as_of' : $key;
 			$values[] = (string) get_post_meta( $post_id, '_wpcv_' . $key, true );
 		}
 		$terms = wp_get_object_terms( $post_id, Entries::TAXONOMY, array( 'fields' => 'ids' ) );
