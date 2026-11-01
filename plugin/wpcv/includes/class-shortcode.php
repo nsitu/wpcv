@@ -88,6 +88,7 @@ final class Shortcode {
 		$url         = esc_url( get_post_meta( $entry->ID, '_wpcv_url', true ), array( 'http', 'https' ) );
 		$title       = get_the_title( $entry );
 		$description = trim( $entry->post_content );
+		$edit_url    = is_user_logged_in() && current_user_can( 'manage_options' ) && current_user_can( 'edit_post', $entry->ID ) ? get_edit_post_link( $entry->ID, 'raw' ) : null;
 		?>
 		<article class="wpcv__entry" data-wpcv-entry data-categories="<?php echo esc_attr( $term_ids ); ?>">
 			<p class="wpcv__date"><?php echo esc_html( Entries::date_label( $entry->ID ) ); ?></p>
@@ -95,7 +96,12 @@ final class Shortcode {
 				<?php echo get_the_post_thumbnail( $entry->ID, 'thumbnail', array( 'class' => 'wpcv__image', 'loading' => 'lazy' ) ); ?>
 			</div>
 			<div class="wpcv__body">
-				<h3 class="wpcv__title"><?php echo esc_html( $title ); ?></h3>
+				<div class="wpcv__heading">
+					<h3 class="wpcv__title"><?php echo esc_html( $title ); ?></h3>
+					<?php if ( $edit_url ) : ?>
+						<a class="wpcv__edit" href="<?php echo esc_url( $edit_url ); ?>"><?php esc_html_e( 'Edit entry', 'wpcv' ); ?><span class="wpcv__screen-reader-text">: <?php echo esc_html( $title ); ?></span></a>
+					<?php endif; ?>
+				</div>
 				<?php if ( $context ) : ?><p class="wpcv__context"><?php echo nl2br( esc_html( $context ) ); ?></p><?php endif; ?>
 				<?php if ( $location ) : ?><p class="wpcv__location"><?php echo esc_html( $location ); ?></p><?php endif; ?>
 				<?php if ( $entry->post_excerpt ) : ?>

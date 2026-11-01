@@ -35,6 +35,8 @@ Category buttons filter entries instantly, with an **All** button to reset the l
 
 Styles inherit the site's font. Override the scoped `--wpcv-accent`, `--wpcv-border`, and `--wpcv-muted` CSS variables on `.wpcv` to customize colors. Thumbnails use WordPress's thumbnail size and crop to fit their reserved space. Plugin updates and deactivation preserve entries, metadata, and taxonomy terms.
 
+Logged-in administrators see **Edit entry** beside each frontend entry title, linking directly to its WordPress editor. The link requires administrator capabilities (`manage_options`) and permission to edit that specific entry. Visitors and other user roles do not see it.
+
 ## Plugin development
 
 - `plugin/wpcv/wpcv.php`: plugin metadata, constants, and lifecycle registration.

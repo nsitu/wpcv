@@ -127,6 +127,18 @@ try {
 	$assert( ! str_contains( $html, '<script' ) && ! str_contains( $html, 'javascript:' ), 'Rendered descriptions and links exclude executable markup.' );
 	$assert( str_contains( $html, 'https://example.org/cv?' ), 'The entry URL renders.' );
 	$assert( ( $GLOBALS['post'] ?? null ) === $original_post, 'Shortcode rendering preserves the surrounding post.' );
+	$assert( 5 === substr_count( $html, 'class="wpcv__edit"' ), 'Administrators see an edit link for every displayed entry.' );
+	$assert( str_contains( $html, 'href="' . esc_url( get_edit_post_link( $late, 'raw' ) ) . '"' ), 'The edit link targets the correct entry editor.' );
+	wp_set_current_user( 0 );
+	$assert( ! str_contains( Shortcode::render(), 'class="wpcv__edit"' ), 'Visitors never see frontend edit links.' );
+	$member = new WP_User( $user_id );
+	foreach ( array( 'edit_posts', 'edit_others_posts', 'edit_published_posts' ) as $capability ) {
+		$member->add_cap( $capability );
+	}
+	wp_set_current_user( $user_id );
+	$assert( current_user_can( 'edit_post', $late ) && ! current_user_can( 'manage_options' ), 'The non-admin test user can edit entries but is not an administrator.' );
+	$assert( ! str_contains( Shortcode::render(), 'class="wpcv__edit"' ), 'Non-administrators do not see edit links even with entry-editing permissions.' );
+	wp_set_current_user( $admins[0]->ID );
 
 	$term = get_term_by( 'name', 'Degree', Entries::TAXONOMY );
 	wp_delete_term( $term->term_id, Entries::TAXONOMY );
