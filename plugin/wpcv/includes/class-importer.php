@@ -16,10 +16,11 @@ final class Importer {
 	/** Validate the entire package before creating any posts, terms, or media. */
 	public static function load( string $file ): array|\WP_Error {
 		$file = realpath( $file );
-		if ( ! $file || ! is_readable( $file ) || filesize( $file ) > 10 * MB_IN_BYTES ) {
+		if ( ! $file || ! is_file( $file ) || ! is_readable( $file ) || filesize( $file ) > 10 * MB_IN_BYTES ) {
 			return new \WP_Error( 'wpcv_file', 'The manifest must be a readable local JSON file smaller than 10 MB.' );
 		}
-		$data = json_decode( file_get_contents( $file ), true );
+		$text = file_get_contents( $file );
+		$data = json_decode( str_starts_with( $text, "\xEF\xBB\xBF" ) ? substr( $text, 3 ) : $text, true );
 		if ( ! is_array( $data ) || 1 !== ( $data['schema_version'] ?? null ) || ! self::identifier( $data['dataset_id'] ?? null ) || ! is_array( $data['entries'] ?? null ) || ! array_is_list( $data['entries'] ) || ! $data['entries'] || count( $data['entries'] ) > 5000 ) {
 			return new \WP_Error( 'wpcv_schema', 'Expected schema_version 1, a dataset_id, and a nonempty list of at most 5000 entries.' );
 		}
@@ -32,6 +33,7 @@ final class Importer {
 				return new \WP_Error( 'wpcv_entry', 'Entry ' . ( $index + 1 ) . ' needs a unique id and a title.' );
 			}
 			$seen[ $entry['id'] ] = true;
+			unset( $entry['_image_path'] ); // Reserved server-only staging value.
 			foreach ( array( 'summary', 'description', 'context', 'date_label', 'url', 'location', 'source_text', 'source_date_text' ) as $key ) {
 				$entry[ $key ] = $entry[ $key ] ?? '';
 				if ( ! is_string( $entry[ $key ] ) ) {
@@ -130,14 +132,18 @@ final class Importer {
 	}
 
 	/** Preview by default; application always creates drafts and skips duplicates. */
-	public static function run( string $file, bool $apply = false, string $batch = '' ): array|\WP_Error {
+	public static function run( string $file, bool $apply = false, string $batch = '', int $offset = 0, int $limit = 0 ): array|\WP_Error {
 		$data = self::load( $file );
 		if ( is_wp_error( $data ) ) {
 			return $data;
 		}
 		if ( $apply && ( ! current_user_can( 'manage_options' ) || ! current_user_can( 'upload_files' ) ) ) {
-			return new \WP_Error( 'wpcv_permission', 'Apply requires a WordPress administrator. Pass --user=YOUR_WORDPRESS_ADMIN_LOGIN to WP-CLI.' );
+			return new \WP_Error( 'wpcv_permission', 'Applying an import requires a WordPress administrator with media-upload permission.' );
 		}
+		if ( $offset < 0 || $limit < 0 || $offset > count( $data['entries'] ) ) {
+			return new \WP_Error( 'wpcv_slice', 'Invalid import progress position.' );
+		}
+		$entries = $limit ? array_slice( $data['entries'], $offset, $limit ) : array_slice( $data['entries'], $offset );
 		$batch = $batch ?: 'import-' . gmdate( 'Ymd-His' ) . '-' . substr( wp_generate_uuid4(), 0, 8 );
 		if ( ! self::identifier( $batch ) ) {
 			return new \WP_Error( 'wpcv_batch', 'Batch must use lowercase letters, numbers, hyphens, or underscores (maximum 100 characters).' );
@@ -148,7 +154,7 @@ final class Importer {
 			return new \WP_Error( 'wpcv_locked', 'Another import is running or left an import lock. Check running processes before removing the wpcv_import_lock option.' );
 		}
 		try {
-			foreach ( $data['entries'] as $entry ) {
+			foreach ( $entries as $entry ) {
 				$source_id = $data['dataset_id'] . ':' . $entry['id'];
 				$existing = self::existing( $source_id );
 				if ( count( $existing ) > 1 ) {

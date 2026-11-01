@@ -41,7 +41,7 @@ Styles inherit the site's font. Override the scoped `--wpcv-accent`, `--wpcv-bor
 - `plugin/wpcv/includes/class-plugin.php`: lifecycle, one-time category seeding, and **Tools > WPCV** help.
 - `plugin/wpcv/includes/class-entries.php`: entry registration, metadata, and editor fields.
 - `plugin/wpcv/includes/class-shortcode.php` and `assets/`: public CV rendering and category filtering.
-- `plugin/wpcv/includes/class-importer.php` and `class-cli.php`: reviewed JSON import and batch rollback, loaded only by WP-CLI.
+- `plugin/wpcv/includes/class-importer.php`, `class-dashboard-import.php`, and `class-cli.php`: shared import engine, dashboard uploads/previews, and optional WP-CLI commands.
 - `scripts/build.py`: packages `plugin/wpcv/` into `dist/wpcv.zip`; repository files and deployment credentials stay outside the package.
 - `.github/workflows/deploy.yml`: validates pull requests; validates and deploys pushes to `main` and manual runs on `main`.
 
@@ -55,11 +55,17 @@ python scripts/build.py
 
 Upload `dist/wpcv.zip` in **Plugins > Add New Plugin > Upload Plugin**, or copy `plugin/wpcv/` into your local WordPress `wp-content/plugins/` directory and activate it. The plugin preserves its content when deactivated or deleted; there is no destructive uninstall hook.
 
-CI runs PHP and shell validation plus WordPress integration tests against WordPress 6.5 and the latest release, using a disposable MySQL database. The integration scripts test CV behavior plus import validation, permissions, locks, media reuse, reruns, failed-upload recovery, and rollback. On a **disposable test site**, run `WPCV_TEST_SITE=1 wp eval-file /path/to/tests/wordpress-integration.php` and then `WPCV_TEST_SITE=1 wp eval-file /path/to/tests/import-integration.php`. The CV test requires a fresh CV dataset with the six initial categories.
+CI runs PHP and shell validation plus WordPress integration tests against WordPress 6.5 and the latest release, using a disposable MySQL database. The integration scripts test CV behavior plus import validation, permissions, locks, media reuse, reruns, failed-upload recovery, rollback, and dashboard staging/batches. On a **disposable test site**, run `WPCV_TEST_SITE=1 wp eval-file /path/to/tests/wordpress-integration.php`, `WPCV_TEST_SITE=1 wp eval-file /path/to/tests/import-integration.php`, and `WPCV_TEST_SITE=1 wp eval-file /path/to/tests/dashboard-import-integration.php`. The CV test requires a fresh CV dataset with the six initial categories.
 
 ## Importing a reviewed CV
 
-See [the import guide](docs/importing.md) for the JSON format, review package, CapRover transfer commands, preview, draft creation, and batch rollback. `scripts/prepare-import.py` prepares source-mapped thumbnails and review files from a curated manifest; it does not automatically infer arbitrary PDF layouts. The content package stays under ignored `output/import/`, separately from the plugin ZIP and normal deployment. Committing/deploying plugin code does not import or publish CV content.
+Open **CV Entries > Import** in the WordPress dashboard. Upload the existing `harold-sikkema-cv-2022-import.zip` to include all 37 entries and thumbnails, review the preview, then click **Import as drafts**. No SSH or WP-CLI is needed for this workflow. JSON alone works for entries without local image files; use the explicit **Import text only** option if the JSON references thumbnails you are not uploading. You can add those thumbnails manually later.
+
+Only administrators with upload permission can import. Previews show proposed dates, categories, thumbnails, actions, and review notes before any entries are created. Imports run in small requests; reload an interrupted preview to resume. Matching source IDs are skipped and existing edits are kept. The results link to that batch's drafts in **CV Entries** for review and publication.
+
+Uploads are staged outside the public site directory. Files are removed after completion or discard; abandoned previews expire after one hour and WordPress schedules their cleanup. Scheduled cleanup requires functioning WordPress cron. ZIP support requires PHP's ZIP extension. The page shows the effective upload limit (up to 25 MB, or the server's lower limit). Raising a lower PHP upload limit is a server configuration change. If PHP's system temporary directory is publicly served or unavailable, define `WPCV_IMPORT_TEMP_DIR` in `wp-config.php` as an existing writable directory outside the public web root.
+
+See [the import guide](docs/importing.md) for the JSON format, review package, dashboard workflow, optional CLI commands, and batch rollback. `scripts/prepare-import.py` prepares source-mapped thumbnails and review files from a curated manifest; it does not automatically infer arbitrary PDF layouts. The content package stays under ignored `output/import/`, separately from the plugin ZIP and normal deployment. Committing/deploying plugin code does not import or publish CV content.
 
 ## CapRover setup
 

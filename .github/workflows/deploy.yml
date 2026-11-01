@@ -41,12 +41,14 @@ jobs:
       - uses: shivammathur/setup-php@bf6b4fbd49ca58e4608c9c89fba0b8d90bd2a39f # 2.35.5
         with:
           php-version: '8.2'
-          extensions: mysqli, dom, gd
+          extensions: mysqli, dom, gd, zip
           coverage: none
       - name: Lint PHP
         run: find plugin/wpcv tests -type f -name '*.php' -print0 | xargs -0 -n1 php -l
       - name: Check JavaScript
-        run: node --check plugin/wpcv/assets/cv.js
+        run: |
+          node --check plugin/wpcv/assets/cv.js
+          node --check plugin/wpcv/assets/import.js
       - name: Check deployment scripts
         run: |
           bash -n scripts/deploy.sh scripts/remote-install.sh scripts/fetch-wp-cli.sh tests/deployment-preflight.sh
@@ -69,6 +71,7 @@ jobs:
           php dist/wp-cli.phar plugin install "$GITHUB_WORKSPACE/dist/wpcv.zip" --activate --path="$WP_TEST_PATH"
           php dist/wp-cli.phar eval-file "$GITHUB_WORKSPACE/tests/wordpress-integration.php" --path="$WP_TEST_PATH"
           php dist/wp-cli.phar eval-file "$GITHUB_WORKSPACE/tests/import-integration.php" --path="$WP_TEST_PATH"
+          php dist/wp-cli.phar eval-file "$GITHUB_WORKSPACE/tests/dashboard-import-integration.php" --path="$WP_TEST_PATH"
 
   deploy:
     name: Deploy to WordPress

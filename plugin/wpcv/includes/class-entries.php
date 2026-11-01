@@ -226,14 +226,22 @@ final class Entries {
 	}
 
 	public static function date_label( int $post_id ): string {
-		$year  = self::sanitize_year( get_post_meta( $post_id, '_wpcv_year', true ) );
-		$month = self::sanitize_month( get_post_meta( $post_id, '_wpcv_month', true ) );
-		$label = (string) get_post_meta( $post_id, '_wpcv_date_label', true );
-		$as_of = self::sanitize_year( get_post_meta( $post_id, '_wpcv_ongoing_as_of', true ) );
+		$dates = array();
+		foreach ( array( 'year', 'month', 'date_label', 'ongoing_as_of', 'end_year', 'end_month' ) as $key ) {
+			$dates[ $key ] = get_post_meta( $post_id, '_wpcv_' . $key, true );
+		}
+		return self::format_date_values( $dates );
+	}
+
+	public static function format_date_values( array $dates ): string {
+		$year  = self::sanitize_year( $dates['year'] ?? 0 );
+		$month = self::sanitize_month( $dates['month'] ?? 0 );
+		$label = (string) ( $dates['date_label'] ?? '' );
+		$as_of = self::sanitize_year( $dates['ongoing_as_of'] ?? 0 );
 		if ( '' === $label ) {
 			$label = self::format_date( $year, $month );
-			$end_year = self::sanitize_year( get_post_meta( $post_id, '_wpcv_end_year', true ) );
-			$end_month = self::sanitize_month( get_post_meta( $post_id, '_wpcv_end_month', true ) );
+			$end_year = self::sanitize_year( $dates['end_year'] ?? 0 );
+			$end_month = self::sanitize_month( $dates['end_month'] ?? 0 );
 			if ( $year && $end_year && $end_year * 100 + $end_month >= $year * 100 + $month ) {
 				$label .= '–' . self::format_date( $end_year, $end_month );
 			} elseif ( $year && $as_of >= $year ) {

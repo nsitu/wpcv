@@ -1,6 +1,20 @@
 # Reviewed CV imports
 
-WPCV 0.3.0 provides explicit WP-CLI imports. **Normal code deployments never import or publish content.** Import commands preview by default. `--apply` always creates drafts, and existing source IDs are skipped, including entries in Trash. Apply requires a WordPress administrator selected with WP-CLI's global `--user` option.
+WPCV 0.4.0 provides dashboard imports and optional WP-CLI commands. **Normal code deployments never import or publish content.** Dashboard imports present a preview before draft creation; CLI commands preview by default. Both workflows skip existing source IDs, including entries in Trash. Dashboard imports require an administrator with media-upload permission.
+
+## Import through the dashboard
+
+1. Deploy WPCV 0.4.0 and open **CV Entries > Import**.
+2. Choose **`harold-sikkema-cv-2022-import.zip`** to upload the prepared entries and thumbnails together. Do not extract it first for dashboard uploads. For JSON without local images, choose the `.json` file instead. If JSON contains thumbnail references but you are not uploading images, explicitly select **Import text only and ignore thumbnail references**; images can be added manually later.
+3. Click **Upload and preview**. Review the entry titles, dates, categories, thumbnails, proposed actions, and highlighted review notes. This step creates no CV entries or media attachments. The preview is accessible only to the administrator who uploaded it.
+4. Click **Import as drafts**. Progress updates as the importer works in small batches. If the connection is interrupted, reload the preview URL and use **Resume import**. Successful records remain drafts and matching source IDs are never imported twice.
+5. Click **Review CV entries** on the result page. When drafts were created, this link filters the entry list to that batch. Edit and publish the selected drafts using the normal WordPress controls.
+
+The existing package has 37 entries, 37 thumbnail files, and nine entries with review notes. Reuploading it safely skips source IDs already present; manual edits are preserved. A text-only import followed by a ZIP import also skips those entries, so add any omitted images to the drafts manually.
+
+The page shows the server's effective file-upload limit, capped at 25 MB by the dashboard importer. ZIPs may contain at most 1,000 entries, with at most 100 MB expanded total and 20 MB per file; JSON manifests are limited to 10 MB. Archives are inspected for unsafe paths, links, special files, duplicate names, encryption, unsupported file types, and excessive expansion before extraction. Optional review HTML/CSV files are ignored, never extracted or served. Raster images remain subject to the shared importer's checksum/type/dimension checks.
+
+Uploads are staged in a private temporary directory outside the public web root, not the Media Library. Preview thumbnails are served through an authenticated, nonce-protected endpoint. Completed/discarded uploads are removed immediately. Previews and reports expire after one hour; WordPress schedules cleanup for abandoned files, so scheduled cleanup depends on WordPress cron running. A container replacement can remove a pending preview; upload the same package again to resume by source ID. WP-CLI is not needed for normal dashboard imports.
 
 ## Harold Sikkema's 2022 CV package
 
@@ -29,7 +43,7 @@ python scripts/prepare-import.py output/import/harold-sikkema-2022/entries.json 
 
 This utility uses the reviewed page bounds and asset mappings in the manifest. It verifies the source PDF's SHA-256, preserves image aspect ratios, and prepares square thumbnails. It does not infer records from an arbitrary new PDF. The PDF and original assets are read without modification.
 
-## Preview, import drafts, and repeat
+## Optional CLI: preview, import drafts, and repeat
 
 With WPCV active and WP-CLI available in the same WordPress environment:
 
@@ -48,9 +62,9 @@ If an individual upload fails, its newly created incomplete draft is removed, pr
 
 After checking the drafts, use **CV Entries** and WordPress's normal bulk-edit tools to publish the selected records. The public shortcode shows only published entries.
 
-## Run against CapRover
+## Optional CLI: run against CapRover
 
-First deploy WPCV 0.3.0 through the existing workflow. These steps are separate from code deployment and reuse your SSH account. Replace the SSH values and the WordPress login below; the WordPress admin login differs from the Unix container user `www-data`.
+First deploy the current WPCV version through the existing workflow. These steps are separate from code deployment and reuse your SSH account. Replace the SSH values and the WordPress login below; the WordPress admin login differs from the Unix container user `www-data`.
 
 1. On your PC, obtain the pinned WP-CLI with `bash scripts/fetch-wp-cli.sh` (Git Bash), then transfer the expanded package and PHAR with PowerShell:
 

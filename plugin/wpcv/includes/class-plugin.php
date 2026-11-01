@@ -14,6 +14,7 @@ final class Plugin {
 	public static function boot(): void {
 		Entries::boot();
 		Shortcode::boot();
+		Dashboard_Import::boot();
 		add_action( 'init', array( self::class, 'upgrade' ), 20 );
 		add_action( 'admin_menu', array( self::class, 'register_admin_page' ) );
 	}
@@ -66,6 +67,7 @@ final class Plugin {
 			<p><?php esc_html_e( 'Create CV Entries, assign CV Categories, and place [wpcv] on a page to display your CV.', 'wpcv' ); ?></p>
 			<p><?php esc_html_e( 'Entries appear newest first by their CV year and month. Use [wpcv order="ASC"] for oldest first. Entries without a year appear last.', 'wpcv' ); ?></p>
 			<p><a href="<?php echo esc_url( admin_url( 'edit.php?post_type=' . Entries::POST_TYPE ) ); ?>"><?php esc_html_e( 'Manage CV entries', 'wpcv' ); ?></a></p>
+			<p><a href="<?php echo esc_url( admin_url( 'edit.php?post_type=' . Entries::POST_TYPE . '&page=wpcv-import' ) ); ?>"><?php esc_html_e( 'Import CV entries from JSON or ZIP', 'wpcv' ); ?></a></p>
 			<p>
 				<?php
 				printf(
